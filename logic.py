@@ -3,61 +3,92 @@ from bs4 import BeautifulSoup
 
 headers = {"User-Agent": "Mozilla/5.0"}
 
-UZB_HINTS = [
-    ".uz", "uzbekistan", "tashkent", "toshkent",
-    "samarkand", "andijan", "namangan", "bukhara",
-    "mchj", "ooo", "oao"
-]
-
-BAD_WORDS = [
-    "login", "sign", "account", "help", "support",
-    "wiki", "wikipedia", "youtube", "facebook",
-    "instagram", "maps", "translate", "news",
-    "office", "microsoft", "google"
-]
-
-
-def get_yandex_results(query):
-    url = f"https://yandex.com/search/?text={query}"
+# ----------------------------
+# 1. orginfo.uz (example structure)
+# ----------------------------
+def scrape_orginfo(oked):
+    url = f"https://orginfo.uz/search?q={oked}"
 
     r = requests.get(url, headers=headers, timeout=10)
     soup = BeautifulSoup(r.text, "html.parser")
 
     results = []
 
-    for item in soup.select("li.serp-item"):
-        a = item.select_one("a.organic__url-text")
-        title = item.select_one("h2")
+    for item in soup.find_all("div"):
+        a = item.find("a")
+        if a and a.get("href"):
+            name = a.get_text(strip=True)
+            link = a["href"]
 
-        if a and title:
-            link = a.get("href")
-            name = title.get_text(strip=True)
-            results.append((name, link))
+            if name and "http" in link:
+                results.append([name, link])
 
     return results
 
 
-def is_valid(title, link):
-    text = (title + " " + link).lower()
+# ----------------------------
+# 2. yellowpages (generic)
+# ----------------------------
+def scrape_yellowpages(oked):
+    url = f"https://www.yellowpages.uz/search/{oked}"
 
-    for w in BAD_WORDS:
-        if w in text:
-            return True
+    r = requests.get(url, headers=headers, timeout=10)
+    soup = BeautifulSoup(r.text, "html.parser")
 
-    if "." not in link:
-        return False
+    results = []
 
-    return any(x in text for x in UZB_HINTS)
+    for a in soup.find_all("a"):
+        href = a.get("href")
+        name = a.get_text(strip=True)
+
+        if href and name and len(name) > 3:
+            if "http" in href:
+                results.append([name, href])
+
+    return results
 
 
-def search_by_oked(oked):
-    query = f"{oked} kompaniya uzbekistan"
-    raw = get_yandex_results(query)
+# ----------------------------
+# 3. goldenpages (generic)
+# ----------------------------
+def scrape_goldenpages(oked):
+    url = f"https://goldenpages.uz/search/?q={oked}"
 
+    r = requests.get(url, headers=headers, timeout=10)
+    soup = BeautifulSoup(r.text, "html.parser")
+
+    results = []
+
+    for a in soup.find_all("a"):
+        href = a.get("href")
+        name = a.get_text(strip=True)
+
+        if href and name and len(name) > 3:
+            if "http" in href:
+                results.append([name, href])
+
+    return results
+
+
+# ----------------------------
+# CLEAN + MERGE + REMOVE DUPLICATES
+# ----------------------------
+def search_all(oked):
+    all_results = []
+
+    all_results += scrape_orginfo(oked)
+    all_results += scrape_yellowpages(oked)
+    all_results += scrape_goldenpages(oked)
+
+    # duplicate remove
+    seen = set()
     clean = []
 
-    for title, link in raw:
-        if is_valid(title, link):
-            clean.append([title, link])
+    for name, link in all_results:
+        key = link.lower()
+
+        if key not in seen:
+            seen.add(key)
+            clean.append([name, link])
 
     return clean
