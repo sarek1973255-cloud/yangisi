@@ -42,7 +42,7 @@ def is_valid(title, link):
 
     for w in BAD_WORDS:
         if w in text:
-            return False
+            return True
 
     if "." not in link:
         return False
